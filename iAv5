@@ -1,0 +1,1573 @@
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.PrintWriter;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Random;
+import java.util.Scanner;
+import java.util.concurrent.ThreadLocalRandom;
+
+//test
+class Plateau {
+	static final int NB_CASES = 9;
+	String[][] cases = new String[NB_CASES][NB_CASES];
+	int[][] couronnes = new int[NB_CASES][NB_CASES];
+	ArrayList<Integer> score = new ArrayList<Integer>();
+
+	static ArrayList<Plateau> allPlateau = new ArrayList<Plateau>();
+
+	public static void initialize() {
+		int nbRemove; // number of dominos to be removed
+
+		Players.createPlayers(); // explicit
+		createPlateau();
+		placeCastles();
+		Kings.createKings(); // explicit
+
+		try {
+			Domino.getDominoes(); // load dominos
+		} catch (FileNotFoundException e) {
+			System.out.print("File not found !");
+		}
+
+		switch (Players.nbPlayers) {
+		case 3:
+			nbRemove = 12;
+			Kings.removeKing(); // only case with 3 kings
+			// we only have 3 dominos
+			Players.newOrder.remove(0);
+			break;
+		case 4:
+			nbRemove = 0;
+			break;
+		default: // for 1 & 2 players (we assume 1 player is player vs AI)
+			nbRemove = 24;
+			break;
+		}
+		Domino.removeDominos(nbRemove);
+
+		Players.givePlayersKings(); // explicit
+
+		// endGame();
+	}
+
+	private static void createPlateau() {
+		for (int i = 0; i < Players.nbPlayers; i++) {
+			Plateau plat = new Plateau();
+			allPlateau.add(plat);
+		}
+
+		int i = 0;
+		for (Players player : Players.allPlayers) {
+			player.playerPlateau = Plateau.allPlateau.get(i);
+			i++;
+		}
+	}
+
+	private static void placeCastles() {
+		for (Plateau plateau : allPlateau) {
+			plateau.cases[4][4] = "Château"; // Castle at the center
+		}
+	}
+
+	public static void afficherPlateauCouronne() {
+		for (Plateau plateau : allPlateau) {
+			System.out.println("Plateau:");
+			for (int i = 0; i < plateau.cases.length; i++) { // rows
+				for (int j = 0; j < plateau.cases[0].length; j++) { // columns
+					System.out.print("		" + plateau.cases[i][j] + plateau.couronnes[i][j]); // add a draw here or whatnot
+				}
+				System.out.println(""); // end line
+			}
+		}
+		System.out.println("");
+	}
+	public static void afficherPlateau() {
+		for (Plateau plateau : allPlateau) {
+			System.out.println("Plateau:");
+			for (int i = 0; i < plateau.cases.length; i++) { // rows
+				for (int j = 0; j < plateau.cases[0].length; j++) { // columns
+					System.out.print("		" + plateau.cases[i][j]); // add a draw here or whatnot
+				}
+				System.out.println(""); // end line
+			}
+		}
+		System.out.println("");
+	}
+
+
+	// TODO : fonction debug
+	public static void affiche(Plateau plateau) {
+		System.out.println("Plateau:");
+		for (int i = 0; i < plateau.cases.length; i++) { // rows
+			for (int j = 0; j < plateau.cases[0].length; j++) { // columns
+				System.out.print("	" + plateau.cases[i][j]); // add a draw here or whatnot
+			}
+			System.out.println(""); // end line
+		}
+		System.out.println("");
+	}
+	
+
+	public static void endGame() {
+		int score[] = { 0, 0 }; // mult, couronnes
+		boolean[][] checkedCases = new boolean[NB_CASES][NB_CASES];
+
+		for (Plateau plateau : allPlateau) {
+			for (int i = 0; i < plateau.cases.length; i++) { // rows
+				for (int j = 0; j < plateau.cases[0].length; j++) { // columns
+					int mult[] = Plateau.countScore(plateau, i, j, score, checkedCases);
+
+					plateau.score.add(mult[0] * mult[1]);
+					score[0] = 0;
+					score[1] = 0;
+				}
+			}
+			checkedCases = new boolean[NB_CASES][NB_CASES]; // resets the checked cases
+			System.out.println("");
+		}
+
+		Players.winner();
+	}
+
+	public static int[] countScore(Plateau plateau, int i, int j, int[] score, boolean[][] checkedCases) {
+		// bit ugly but working fine
+
+		checkedCases[i][j] = true; // mark current one as checked
+		score[0]++; // mult++
+		score[1] += plateau.couronnes[i][j];
+
+		// check order : below, right, above, left
+		if (plateau.cases[i][j] != null) {
+			// check cases exist, don't check below for imax
+			if (i < (NB_CASES - 1) && plateau.cases[i + 1][j] != null) {
+				if (plateau.cases[i][j].equals(plateau.cases[i + 1][j]) && !checkedCases[i + 1][j]) { // check below
+					score = countScore(plateau, i + 1, j, score, checkedCases);
+				}
+			}
+			// check cases exist, don't check right for jmax
+			if (j < (NB_CASES - 1) && plateau.cases[i][j + 1] != null) {
+				if (plateau.cases[i][j].equals(plateau.cases[i][j + 1]) && !checkedCases[i][j + 1]) { // check right
+					score = countScore(plateau, i, j + 1, score, checkedCases);
+				}
+			}
+			// check cases exist, don't check above for imin
+			if (i > 0 && plateau.cases[i - 1][j] != null) {
+				if (plateau.cases[i][j].equals(plateau.cases[i - 1][j]) && !checkedCases[i - 1][j]) { // check above
+					score = countScore(plateau, i - 1, j, score, checkedCases);
+				}
+			}
+			// check cases exist, don't check left for jmin
+			if (j > 0 && plateau.cases[i][j - 1] != null) {
+				if (plateau.cases[i][j].equals(plateau.cases[i][j - 1]) && !checkedCases[i][j - 1]) { // check left
+					score = countScore(plateau, i, j - 1, score, checkedCases);
+				}
+			}
+		}
+
+		return score; // once everything around current have been checked, return score+1
+	}
+
+}
+
+class Domino extends Plateau implements Comparable<Domino> {
+	int nbCouronne1;
+	String type1;
+	int nbCouronne2;
+	String type2;
+	int numDomino;
+
+	int posX; // position on game board
+	int posY;
+
+	static ArrayList<Domino> allDominoes = new ArrayList<Domino>();
+	static ArrayList<Domino> currentDominos = new ArrayList<Domino>();
+	static ArrayList<Domino> playableDominos = new ArrayList<Domino>();
+	static ArrayList<Integer> dominoOrder = new ArrayList<Integer>();
+
+	public static void getDominoes() throws FileNotFoundException { // import dominoes, throws exception if file not
+																	// found
+		Scanner scanner = new Scanner(new File("dominos.csv")); // open csv file
+		scanner.nextLine(); // skip first line
+		while (scanner.hasNextLine()) { // read line by line
+
+			Scanner dataScanner = new Scanner(scanner.nextLine()); // take one line
+			dataScanner.useDelimiter(","); // indicates that ',' separates the data
+
+			Domino dom = new Domino(); // create a new domino
+
+			while (dataScanner.hasNext()) { // read every element of the line
+				dom.nbCouronne1 = dataScanner.nextInt();
+				dom.type1 = dataScanner.next();
+				dom.nbCouronne2 = dataScanner.nextInt();
+				dom.type2 = dataScanner.next();
+				dom.numDomino = dataScanner.nextInt();
+			}
+
+			allDominoes.add(dom); // add the populated domino
+			dataScanner.close();
+		}
+		scanner.close();
+	}
+
+	public static int[] chooseCoordinates() {
+		int[] coordinates = new int[2];
+
+		Scanner scan = new Scanner(System.in);
+		System.out.println("Entrez la coordonée x du domino: ");
+		// while scan does not have an int between 0 and 9
+		while (!scan.hasNext("[0-9]")) {
+			System.out.println("Entrez un nombre positif !");
+			scan.next(); // this is important!
+		}
+		int x = scan.nextInt();
+
+		System.out.println("Entrez la coordonée y du domino: ");
+		while (!scan.hasNext("[0-9]")) {
+			System.out.println("Entrez un nombre positif !");
+			scan.next(); // this is important!
+		}
+		int y = scan.nextInt();
+
+		coordinates[0] = x;
+		coordinates[1] = y;
+
+		return coordinates;
+	}
+	public static void removeDomino() {
+		allDominoes.clear();
+		currentDominos.clear();
+		playableDominos.clear();
+		dominoOrder.clear();
+
+	}
+	public static String chooseOrientation() {
+		String orientation = "";
+
+		Scanner scan = new Scanner(System.in);
+		System.out.println("Entrez le sens du domino (up, down, left ou right) :");
+		orientation = scan.nextLine();
+
+		// verify input
+		if (!orientation.matches("up|down|left|right")) {
+			System.out.println("Orientation incorrecte !");
+			chooseOrientation();
+		}
+
+		return orientation;
+	}
+
+	public static Domino chooseDomino(Players player) {
+		int chosenNumber = 0;
+		int index = 0;
+		Domino chosenDomino = null;
+
+		Scanner scan = new Scanner(System.in);
+		System.out.print("Domino jouables : ");
+		for (Domino domino : playableDominos) {
+			System.out.print("Domino " + domino.numDomino + ", ");
+		}
+		System.out.println("\n" + player.name + ":" + " Entrez le numéro du prochain domino que vous voulez jouer: ");
+
+		while (!scan.hasNextInt()) {
+			System.out.println("Entrez un nombre positif !");
+			scan.next(); // this is important!
+		}
+		chosenNumber = scan.nextInt();
+
+		for (Domino domino : playableDominos) {
+			if (domino.numDomino == chosenNumber) {
+				chosenDomino = domino;
+				break;
+			}
+			index++;
+		}
+
+		// if still null chosenNumber not valid
+		if (chosenDomino == null) {
+			System.out.println("Entrez un numéro de domino valide !");
+			index = 0;
+			chooseDomino(player);
+		}
+
+		playableDominos.remove(chosenDomino);
+		currentDominos.add(chosenDomino);
+		//System.out.println("index:" + dominoOrder.get(index) + " player:" + player);
+
+		Players.newOrder.set(dominoOrder.get(index), player); // set order accordingly
+		dominoOrder.remove(index);
+
+		return chosenDomino;
+	}
+
+	public static void removeDominos(int nbRemove) {
+
+		for (int i = 0; i < nbRemove; i++) {
+			Random rand = new Random();
+			int n = rand.nextInt(allDominoes.size()); // max = size - 1.
+
+			allDominoes.remove(n);
+		}
+		System.out.println(allDominoes.size() + " Dominos en jeu");
+	}
+
+	public static void placeDomino(Domino domino, Plateau plateau, int x1, int y1, String orientation) {
+		int x2, y2;
+
+		// Maybe a separate function ?
+		switch (orientation) {
+		case ("up"):
+			x2 = x1 - 1;
+			y2 = y1;
+			break;
+		case ("down"):
+			x2 = x1 + 1;
+			y2 = y1;
+			break;
+		case ("left"):
+			x2 = x1;
+			y2 = y1 - 1;
+			break;
+		case ("right"):
+			x2 = x1;
+			y2 = y1 + 1;
+			break;
+		default: // right by default
+			x2 = x1;
+			y2 = y1 + 1;
+			break;
+		}
+
+		// Below creates an array with the cases around the selected case.
+		// TODO: out of bound if not in plateau
+		if (plateau.cases[x1][y1] == null && plateau.cases[x2][y2] == null) { // check if cases are empty
+
+			ArrayList<String> near1 = getNearCases(plateau, x1, y1);
+			ArrayList<String> near2 = getNearCases(plateau, x2, y2);
+
+			// check if surrounding cases are the same type
+			/*
+			 * regex below if we want if
+			 * (near1.toString().matches(".*"+domino.type1+".*|.*Ch.teau.*")) {
+			 * System.out.println("Success !"); }
+			 */
+
+			if (near1.contains(domino.type1) || near1.contains("Château") || near2.contains(domino.type2)
+					|| near2.contains("Château")) {
+				plateau.cases[x1][y1] = domino.type1  ;
+				plateau.cases[x2][y2] = domino.type2;
+				plateau.couronnes[x1][y1] = domino.nbCouronne1;
+				plateau.couronnes[x2][y2] = domino.nbCouronne2;
+			} else {
+				System.out.println("Les dominos ne correspondent pas !");
+			}
+
+			// below is used to skip validation for debug
+			plateau.cases[x1][y1] = domino.type1;
+			plateau.cases[x2][y2] = domino.type2;
+			plateau.couronnes[x1][y1] = domino.nbCouronne1;
+			plateau.couronnes[x2][y2] = domino.nbCouronne2;
+
+		} else {
+			System.out.println("Cases d�j� prises !");
+		}
+
+		checkSize(plateau, x1, y1, x2, y2);
+
+		currentDominos.remove(domino);
+
+		afficherPlateau(); // redraw the board
+	}
+
+	public static Boolean isPlayable(Domino domino, Plateau plateau) {
+		ArrayList<String> validCases = new ArrayList<String>();
+		validCases.add(domino.type1);
+		validCases.add(domino.type2);
+		validCases.add("Château");
+
+		// for every case
+		for (int i = 0; i < plateau.cases.length; i++) { // rows
+			for (int j = 0; j < plateau.cases[0].length; j++) { // columns
+				// if checked contains a possible solutions
+				if (validCases.contains(plateau.cases[i][j])) {
+					// if the surrounding case is free
+					if (plateau.cases[i + 1][j] == null) {
+						ArrayList<String> near = getNullCases(plateau, i + 1, j);
+						// if one of the near cases is free
+						if (near.contains(null)) {
+							return true;
+						}
+					}
+					if (plateau.cases[i - 1][j] == null) {
+						ArrayList<String> near = getNullCases(plateau, i - 1, j);
+						if (near.contains(null)) {
+							return true;
+						}
+					}
+					if (plateau.cases[i][j + 1] == null) {
+						ArrayList<String> near = getNullCases(plateau, i, j + 1);
+						if (near.contains(null)) {
+							return true;
+						}
+					}
+					if (plateau.cases[i][j - 1] == null) {
+						ArrayList<String> near = getNullCases(plateau, i, j - 1);
+						if (near.contains(null)) {
+							return true;
+						}
+					}
+
+				}
+
+			}
+		}
+		return false;
+	}
+
+	public static ArrayList<ArrayList<Integer>> playablePosition(Domino domino, Plateau plateau) {
+		ArrayList<String> validCases = new ArrayList<String>();
+		ArrayList<Integer> coordonnée = new ArrayList<Integer>();
+		// TODO: cherhcher le i et j minimum (contenant un domino) du plateau pour leur
+		// ajouter 5 ou 7
+		// selon le nombre de joueurs afin de prendre en compte le plateau 5*5 ou 7*7
+		// imposé.
+		int iMin = 0;
+		int jMin = 0;
+		while (loopRowsAAA(iMin, plateau) == 0) {
+			iMin++;
+		}
+		while (loopColumnsAAA(jMin, plateau) == 0) {
+			jMin++;
+		}
+		int iMax = 8;
+		int jMax = 8;
+		while (loopRowsAAA(iMax, plateau) == 0) {
+			iMax--;
+		}
+		while (loopColumnsAAA(jMax, plateau) == 0) {
+			jMax--;
+		}
+		int deltaI = iMax - iMin;
+		int deltaJ = jMax - jMin;
+		
+		ArrayList<ArrayList<Integer>> dominoPosition = new ArrayList<ArrayList<Integer>>();
+		validCases.add(domino.type1);
+		validCases.add(domino.type2);
+		validCases.add("Château");
+		ArrayList<String> validType1 = new ArrayList<String>();
+		validType1.add(domino.type1);
+		validType1.add("Château");
+		ArrayList<String> validType2 = new ArrayList<String>();
+		validType1.add(domino.type2);
+		validType1.add("Château");
+		// for every case
+		for (int i = 0; i < plateau.cases.length; i++) { // rows
+			for (int j = 0; j < plateau.cases[0].length; j++) { // columns
+				// if checked contains a possible solutions
+				if (validCases.contains(plateau.cases[i][j])) {
+					// if the surrounding case is free
+					if(i+1<9) {
+					if (plateau.cases[i + 1][j] == null) {
+						ArrayList<String> near = getNullCases1(plateau, i + 1, j);
+						// if one of the near cases is free
+						if (near.get(1) == null && (deltaJ+1<6) && (deltaI+1<6)) {
+							if (validType1.contains(plateau.cases[i][j]) ) {
+								coordonnée.add(i + 1);
+								coordonnée.add(j);
+								coordonnée.add(i + 1);
+								coordonnée.add(j + 1);
+								dominoPosition.add(new ArrayList<Integer>(coordonnée));
+								coordonnée.clear();
+							} if (validType2.contains(plateau.cases[i][j]) ){
+								coordonnée.add(i + 1);
+								coordonnée.add(j + 1);
+								coordonnée.add(i + 1);
+								coordonnée.add(j);
+								dominoPosition.add(new ArrayList<Integer>(coordonnée));
+								coordonnée.clear();
+							}
+						}
+
+						if ((near.get(2) == null) && (deltaJ+2<6)){
+							if (validType1.contains(plateau.cases[i][j]) ) {
+								coordonnée.add(i + 1);
+								coordonnée.add(j);
+								coordonnée.add(i + 2);
+								coordonnée.add(j);
+								dominoPosition.add(new ArrayList<Integer>(coordonnée));
+								coordonnée.clear();
+							} if (validType2.contains(plateau.cases[i][j]) ){
+								coordonnée.add(i + 2);
+								coordonnée.add(j);
+								coordonnée.add(i + 1);
+								coordonnée.add(j);
+								dominoPosition.add(new ArrayList<Integer>(coordonnée));
+								coordonnée.clear();
+							}
+						}
+						if (near.get(3) == null && (deltaJ+1<6) && (deltaI+1<6)) {
+							if (validType1.contains(plateau.cases[i][j])) {
+								coordonnée.add(i + 1);
+								coordonnée.add(j);
+								coordonnée.add(i + 1);
+								coordonnée.add(j - 1);
+								dominoPosition.add(new ArrayList<Integer>(coordonnée));
+								coordonnée.clear();
+							} if (validType2.contains(plateau.cases[i][j]) ){
+								coordonnée.add(i + 1);
+								coordonnée.add(j - 1);
+								coordonnée.add(i + 1);
+								coordonnée.add(j);
+								dominoPosition.add(new ArrayList<Integer>(coordonnée));
+								coordonnée.clear();
+							}
+						}}
+					}
+					if(i-1>=0) {
+					if (plateau.cases[i - 1][j] == null && (deltaJ+2<6)) {
+						ArrayList<String> near = getNullCases1(plateau, i - 1, j);
+						if (near.get(0) == null) {
+							if (validType1.contains(plateau.cases[i][j])) {
+								coordonnée.add(i - 1);
+								coordonnée.add(j);
+								coordonnée.add(i - 2);
+								coordonnée.add(j);
+								dominoPosition.add(new ArrayList<Integer>(coordonnée));
+								coordonnée.clear();
+							} if (validType2.contains(plateau.cases[i][j]) ){
+								coordonnée.add(i - 2);
+								coordonnée.add(j);
+								coordonnée.add(i - 1);
+								coordonnée.add(j);
+								dominoPosition.add(new ArrayList<Integer>(coordonnée));
+								coordonnée.clear();
+							}
+						}
+						if (near.get(1) == null && (deltaJ+1<6) && (deltaI+1<6)) {
+							if (validType1.contains(plateau.cases[i][j])) {
+								coordonnée.add(i - 1);
+								coordonnée.add(j);
+								coordonnée.add(i - 1);
+								coordonnée.add(j + 1);
+								dominoPosition.add(new ArrayList<Integer>(coordonnée));
+								coordonnée.clear();
+							} if (validType2.contains(plateau.cases[i][j]) ){
+								coordonnée.add(i - 1);
+								coordonnée.add(j + 1);
+								coordonnée.add(i - 1);
+								coordonnée.add(j);
+								dominoPosition.add(new ArrayList<Integer>(coordonnée));
+								coordonnée.clear();
+							}
+						}
+						if (near.get(3) == null && (deltaJ+1<6) && (deltaI+1<6)) {
+							if (validType1.contains(plateau.cases[i][j])) {
+								coordonnée.add(i - 1);
+								coordonnée.add(j);
+								coordonnée.add(i - 1);
+								coordonnée.add(j - 1);
+								dominoPosition.add(new ArrayList<Integer>(coordonnée));
+								coordonnée.clear();
+							} if (validType2.contains(plateau.cases[i][j]) ){
+								coordonnée.add(i - 1);
+								coordonnée.add(j - 1);
+								coordonnée.add(i - 1);
+								coordonnée.add(j);
+								dominoPosition.add(new ArrayList<Integer>(coordonnée));
+								coordonnée.clear();
+							}}
+						}
+					}
+					if(j+1<9) {
+					if (plateau.cases[i][j + 1] == null && (deltaJ+1<6) && (deltaI+1<6)) {
+						ArrayList<String> near = getNullCases1(plateau, i, j + 1);
+						if (near.get(0) == null) {
+							if (validType1.contains(plateau.cases[i][j])) {
+								coordonnée.add(i);
+								coordonnée.add(j + 1);
+								coordonnée.add(i - 1);
+								coordonnée.add(j + 1);
+								dominoPosition.add(new ArrayList<Integer>(coordonnée));
+								coordonnée.clear();
+							} if (validType2.contains(plateau.cases[i][j]) ){
+								coordonnée.add(i - 1);
+								coordonnée.add(j + 1);
+								coordonnée.add(i);
+								coordonnée.add(j + 1);
+								dominoPosition.add(new ArrayList<Integer>(coordonnée));
+								coordonnée.clear();
+							}
+						}
+						if (near.get(1) == null && (deltaI+2<6)) {
+							if (validType1.contains(plateau.cases[i][j])) {
+								coordonnée.add(i);
+								coordonnée.add(j + 1);
+								coordonnée.add(i);
+								coordonnée.add(j + 2);
+								dominoPosition.add(new ArrayList<Integer>(coordonnée));
+								coordonnée.clear();
+							} if (validType2.contains(plateau.cases[i][j]) ){
+								coordonnée.add(i);
+								coordonnée.add(j + 2);
+								coordonnée.add(i);
+								coordonnée.add(j + 1);
+								dominoPosition.add(new ArrayList<Integer>(coordonnée));
+								coordonnée.clear();
+							}
+						}
+						if (near.get(2) == null && (deltaJ+1<6) && (deltaI+1<6)) {
+							if (validType1.contains(plateau.cases[i][j])) {
+								coordonnée.add(i);
+								coordonnée.add(j + 1);
+								coordonnée.add(i + 1);
+								coordonnée.add(j + 1);
+								dominoPosition.add(new ArrayList<Integer>(coordonnée));
+								coordonnée.clear();
+							} if (validType2.contains(plateau.cases[i][j]) ){
+								coordonnée.add(i);
+								coordonnée.add(j + 1);
+								coordonnée.add(i + 1);
+								coordonnée.add(j + 1);
+								dominoPosition.add(new ArrayList<Integer>(coordonnée));
+								coordonnée.clear();
+							}}
+						}
+					}
+					if(j-1>=0) {
+					if (plateau.cases[i][j - 1] == null) {
+						ArrayList<String> near = getNullCases1(plateau, i, j - 1);
+						if (near.get(0) == null && (deltaJ+1<6) && (deltaI+1<6)) {
+							if (validType1.contains(plateau.cases[i][j])) {
+								coordonnée.add(i);
+								coordonnée.add(j - 1);
+								coordonnée.add(i - 1);
+								coordonnée.add(j - 1);
+								dominoPosition.add(new ArrayList<Integer>(coordonnée));
+								coordonnée.clear();
+							} if (validType2.contains(plateau.cases[i][j]) ){
+								coordonnée.add(i - 1);
+								coordonnée.add(j - 1);
+								coordonnée.add(i);
+								coordonnée.add(j - 1);
+								dominoPosition.add(new ArrayList<Integer>(coordonnée));
+								coordonnée.clear();
+							}
+						}
+						if (near.get(2) == null && (deltaJ+1<6) && (deltaI+1<6)) {
+							if (validType1.contains(plateau.cases[i][j])) {
+								coordonnée.add(i);
+								coordonnée.add(j - 1);
+								coordonnée.add(i + 1);
+								coordonnée.add(j - 1);
+								dominoPosition.add(new ArrayList<Integer>(coordonnée));
+								coordonnée.clear();
+							} if (validType2.contains(plateau.cases[i][j]) ){
+								coordonnée.add(i + 1);
+								coordonnée.add(j - 1);
+								coordonnée.add(i);
+								coordonnée.add(j - 1);
+								dominoPosition.add(new ArrayList<Integer>(coordonnée));
+								coordonnée.clear();
+							}
+						}
+						if (near.get(3) == null && (deltaI+2<6)) {
+							if (validType1.contains(plateau.cases[i][j])) {
+								coordonnée.add(i);
+								coordonnée.add(j - 1);
+								coordonnée.add(i);
+								coordonnée.add(j - 2);
+								dominoPosition.add(new ArrayList<Integer>(coordonnée));
+								coordonnée.clear();
+							} if (validType2.contains(plateau.cases[i][j]) ){
+								coordonnée.add(i);
+								coordonnée.add(j - 2);
+								coordonnée.add(i);
+								coordonnée.add(j - 1);
+								dominoPosition.add(new ArrayList<Integer>(coordonnée));
+								coordonnée.clear();
+							}}
+						}
+					}
+
+				}
+
+			}
+		}
+		return dominoPosition;
+
+	}
+
+	public static Plateau copy(Plateau plateau) {
+		Plateau plateauVirtuel = new Plateau();
+		for (int i = 0; i < 9; i++) {
+			for (int j = 0; j < 9; j++) {
+				plateauVirtuel.cases[i][j] = plateau.cases[i][j];
+				plateauVirtuel.couronnes[i][j] = plateau.couronnes[i][j];
+			}
+		}
+		return plateauVirtuel;
+	}
+
+	public static ArrayList<Integer> nbrPointPredict(Plateau plateau, Domino domino) {
+		ArrayList<Integer> bestNumDomino = new ArrayList<Integer>();
+		ArrayList<ArrayList<Integer>> positionJouable = playablePosition(domino, plateau);
+		int scoreMax = -1;
+		
+			for (ArrayList<Integer> position : positionJouable) {
+				// Création d'un plateau virtuel avec le domino posé à une des positions possibl
+				Plateau plateauVirtuel = copy(plateau);
+				plateauVirtuel.cases[position.get(0)][position.get(1)] = domino.type1;
+				plateauVirtuel.cases[position.get(2)][position.get(3)] = domino.type2;
+				plateauVirtuel.couronnes[position.get(0)][position.get(1)] = domino.nbCouronne1;
+				plateauVirtuel.couronnes[position.get(2)][position.get(3)] = domino.nbCouronne2;
+				for (Domino dominoNext : playableDominos) {
+					ArrayList<ArrayList<Integer>> positionJouableNext = playablePosition(dominoNext, plateauVirtuel);
+					for (ArrayList<Integer> positionNext : positionJouableNext) {
+						Plateau plateauVirtuel2 = copy(plateauVirtuel);
+						plateauVirtuel2.cases[positionNext.get(0)][positionNext.get(1)] = domino.type1;
+						plateauVirtuel2.cases[positionNext.get(2)][positionNext.get(3)] = domino.type2;
+						plateauVirtuel2.couronnes[positionNext.get(0)][positionNext.get(1)] = domino.nbCouronne1;
+						plateauVirtuel2.couronnes[positionNext.get(2)][positionNext.get(3)] = domino.nbCouronne2;
+						// lancemenent de la fonction comptage de point du coup après avoir joué ce
+						// domino on garde en valeur cette valeur
+						int score[] = { 0, 0 }; // mult, couronnes
+						int scoreTotal = 0;
+						boolean[][] checkedCases = new boolean[NB_CASES][NB_CASES];
+						for (int i = 0; i < plateauVirtuel2.cases.length; i++) { // rows
+							for (int j = 0; j < plateauVirtuel2.cases[0].length; j++) { // columns
+								int mult[] = Plateau.countScore(plateauVirtuel2, i, j, score, checkedCases);
+								scoreTotal = scoreTotal + mult[0] * mult[1];
+								score[0] = 0;
+								score[1] = 0;
+							}
+		
+						}
+					
+						checkedCases = new boolean[NB_CASES][NB_CASES];
+						// initialisation de la liste qui retournera le nombre de point avec sa position
+						if ((scoreTotal > scoreMax) && (bestNumDomino.isEmpty())) {
+							scoreMax = scoreTotal;
+							bestNumDomino.add(scoreMax);
+							bestNumDomino.add(position.get(0));
+							bestNumDomino.add(position.get(1));
+							bestNumDomino.add(position.get(2));
+							bestNumDomino.add(position.get(3));
+							// Si la liste est deja initialisé on changera les valeurs de cette liste
+						} else if ((scoreTotal > scoreMax)) {
+							scoreMax = scoreTotal;
+							bestNumDomino.set(0, scoreMax);
+							bestNumDomino.set(1, position.get(0));
+							bestNumDomino.set(2, position.get(1));
+							bestNumDomino.set(3, position.get(2));
+							bestNumDomino.set(4, position.get(3));
+						}
+		}}}
+			if ((bestNumDomino.isEmpty())) {
+				bestNumDomino.add(0);
+				return bestNumDomino;
+			}
+		// On retourne la position optimiser et son nombre de point
+		return bestNumDomino;
+	}
+	  public static ArrayList<Integer> nbrPoint(Plateau plateau, Domino domino) {
+			ArrayList<Integer> bestNumDomino = new ArrayList<Integer>();
+			ArrayList<ArrayList<Integer>> positionJouable = playablePosition(domino, plateau);
+			int scoreMax = -1;
+			for (ArrayList<Integer> position : positionJouable) {
+				//Création d'un plateau virtuel avec le domino posé à une des positions possibl
+				Plateau plateauVirtuel = copy(plateau);
+				plateauVirtuel.cases[position.get(0)][position.get(1)] = domino.type1;
+				plateauVirtuel.cases[position.get(2)][position.get(3)] = domino.type2;
+				plateauVirtuel.couronnes[position.get(0)][position.get(1)] = domino.nbCouronne1;
+				plateauVirtuel.couronnes[position.get(2)][position.get(3)] = domino.nbCouronne2;
+				//lancemenent de la fonction comptage de point du coup après avoir joué ce domino on garde en valeur cette valeur
+				int score[] = { 0, 0 }; // mult, couronnes
+				int scoreTotal = 0;
+				boolean[][] checkedCases = new boolean[NB_CASES][NB_CASES];
+				for (int i = 0; i < plateau.cases.length; i++) { // rows
+					for (int j = 0; j < plateau.cases[0].length; j++) { // columns
+						int mult[] = Plateau.countScore(plateauVirtuel, i, j, score, checkedCases);
+						scoreTotal = scoreTotal + mult[0] * mult[1];
+						score[0] = 0;
+						score[1] = 0;
+					}
+		
+				}
+				
+				checkedCases = new boolean[NB_CASES][NB_CASES];
+				//initialisation de la liste qui retournera le nombre de point avec sa position
+				if ((scoreTotal > scoreMax) && (bestNumDomino.isEmpty())){
+					scoreMax = scoreTotal;
+					bestNumDomino.add(scoreMax);
+					bestNumDomino.add(position.get(0));
+					bestNumDomino.add(position.get(1));
+					bestNumDomino.add(position.get(2));
+					bestNumDomino.add(position.get(3));
+				//Si la liste est deja initialisé on changera les valeurs de cette liste
+				}else if ((scoreTotal > scoreMax)){
+					scoreMax = scoreTotal;
+					bestNumDomino.set(0,scoreMax);
+					bestNumDomino.set(1,position.get(0));
+					bestNumDomino.set(2,position.get(1));
+					bestNumDomino.set(3,position.get(2));
+					bestNumDomino.set(4,position.get(3));
+				}
+			}
+
+			//On retourne la position optimiser et son nombre de point
+			if (bestNumDomino.isEmpty()) {
+				bestNumDomino.add(0);
+			}
+			return bestNumDomino;
+		}
+	public static ArrayList<Domino> playableDom(Plateau plateau) {
+		ArrayList<Domino> domJouables = new ArrayList<Domino>();
+		// On balaye tous les dominos qu'il reste
+		// System.out.print("dominoplayable dans fct playableDom:"+playableDominos);
+		for (Domino domino : playableDominos) {
+			// test si la liste n'est pas vide
+			if (!playablePosition(domino, plateau).isEmpty()) {
+				// On ajoute les domino jouable à la liste
+				domJouables.add(domino);
+			}
+		}
+		// retourne la liste des dominos jouable
+		return domJouables;
+	}
+
+	// retourne la somme des couronnes sur le domino
+	public static int crownDom(Domino domino) {
+		int crown = domino.nbCouronne1 + domino.nbCouronne2;
+		return crown;
+	}
+
+	public static boolean appartient(ArrayList<Integer> bestPositionPoint,ArrayList<ArrayList<Integer>> positionsCentrer) {
+		bestPositionPoint.remove(0);
+		if (bestPositionPoint.isEmpty()) {
+			return false;
+		}
+		if (positionsCentrer.contains(bestPositionPoint)) {
+			return true;
+		}
+		return false;
+	}
+
+	public static ArrayList<ArrayList<Integer>> positionsCentrer(Plateau plateau, Domino domino) {
+		// Pour chaque domino on va retourner leur position qui permettent le centrage
+		// de l'hdv
+		ArrayList<ArrayList<Integer>> positionJouable = playablePosition(domino, plateau);
+		ArrayList<Integer> coordCorrect = new ArrayList<Integer>();
+		ArrayList<ArrayList<Integer>> positionsCentrer = new ArrayList<ArrayList<Integer>>();
+		int compteur = 0;
+		for (ArrayList<Integer> position : positionJouable) {
+			for (int coordonnées : position) {
+
+				// Si une des coordonnées est déjà pas compatible on peut sortir de la boucle
+				// for
+				if ((coordonnées > 6) || (coordonnées < 2)) {
+					break;
+				}
+				// Si la coordonnées convient on ajoute 1 au compteur
+				if ((coordonnées <= 6) || (coordonnées >= 2)) {
+					coordCorrect.add(coordonnées);
+					compteur++;
+				}
+			}
+			// Si compteur égal à 4 les 4 coordonnées la position du domino va permettre le
+			// centrage du chateau
+			if (compteur == 4) {
+				// On renvoie la coordonnée de la 1er position coorect
+				positionsCentrer.add(new ArrayList<Integer>(coordCorrect));
+				coordCorrect.clear();
+				// Si c'est pas le cas il faut reinitialiser le compteur à 0 pour tester la
+				// prochaine position
+			} else {
+				coordCorrect.clear();
+				compteur = 0;
+			}
+		}
+		return positionsCentrer;
+	}
+
+	public static int centerTownHall(Plateau plateau, Domino domino) {
+		// Pour chaque domino on va retourner leur position qui permettent le centrage
+		// de l'hdv
+		ArrayList<ArrayList<Integer>> positionJouable = playablePosition(domino, plateau);
+		int compteur = 0;
+		for (ArrayList<Integer> position : positionJouable) {
+			for (int coordonnées : position) {
+
+				// Si une des coordonnées est déjà pas compatible on peut sortir de la boucle
+				// for
+				if ((coordonnées > 6) || (coordonnées < 2)) {
+					break;
+				}
+				// Si la coordonnées convient on ajoute 1 au compteur
+				if ((coordonnées <= 6) || (coordonnées >= 2)) {
+					compteur++;
+				}
+			}
+			// Si compteur égal à 4 les 4 coordonnées la position du domino va permettre le
+			// centrage du chateau
+			if (compteur == 4) {
+				// On renvoie la valeur de vérif
+				return 1;
+				// Si c'est pas le cas il faut reinitialiser le compteur à 0 pour tester la
+				// prochaine position
+			} else {
+				compteur = 0;
+			}
+		}
+		return 0;
+	}
+
+	public static int invest(Domino domino) {
+		int nbrType = 0;
+		int nbrCouronne = 0;
+		int ptPotentiel;
+		for (Domino dominoRestant : allDominoes) {
+			if (domino.type1.equals(dominoRestant.type1)) {
+				nbrType++;
+				nbrCouronne = nbrCouronne + dominoRestant.nbCouronne1;
+			}
+			if (domino.type1.equals(dominoRestant.type2)) {
+				nbrType++;
+				nbrCouronne = nbrCouronne + dominoRestant.nbCouronne2;
+			}
+			if (domino.type2.equals(dominoRestant.type1)) {
+				nbrType++;
+				nbrCouronne = nbrCouronne + dominoRestant.nbCouronne1;
+			}
+			if (domino.type2.equals(dominoRestant.type2)) {
+				nbrType++;
+				nbrCouronne = nbrCouronne + dominoRestant.nbCouronne2;
+			}
+		}
+		// System.out.print("nbrType :" + nbrType);
+		// System.out.print("nbrCrown :" + nbrCouronne);
+		ptPotentiel = nbrType * nbrCouronne;
+		return ptPotentiel;
+	}
+
+	public static Domino iAChoose(Plateau plateau, double a, double b, double c, double c4, double e, Players player) {
+		ArrayList<Domino> domJouable = playableDom(plateau);
+		double scoreMem = 0;
+
+		// si aucun domino jouable on prend le plus petit nombre pour rejouer premier
+
+		if (domJouable.isEmpty()) {
+			player.playerDominos.add(playableDominos.get(0));
+			// System.out.println("domino added");
+			Domino domBest = playableDominos.get(0);
+			playableDominos.remove(playableDominos.get(0));
+			Players.newOrder.set(dominoOrder.get(0), player); // set order accordingly
+			dominoOrder.remove(0);
+			
+			return domBest;
+		}
+		Domino domBest = domJouable.get(0);
+		for (Domino domino : domJouable) {
+
+			double score = a * nbrPointPredict(plateau, domino).get(0) + b * crownDom(domino) + c * centerTownHall(plateau, domino) + c4 * invest(domino) + e * nbrPoint(plateau, domino).get(0);
+			if (score > scoreMem) {
+				domBest = domino;
+				scoreMem = score;
+			}
+		}
+		// définition de l'ordre de jeux pour le prochain tour
+		int index = 0;
+
+		for (Domino domino : playableDominos) {
+			if (domino.equals(domBest)) {
+				break;
+			}
+			index++;
+		}
+		Players.newOrder.set(dominoOrder.get(index), player); // set order accordingly
+		dominoOrder.remove(index);
+		player.playerDominos.add(domBest);
+		playableDominos.remove(domBest);
+		
+		return domBest;
+		}
+	
+	
+	
+	
+	public static int iAPlace(Plateau plateau, Domino domBest, Players player) {
+		int x1 = 0;
+		int y1 = 0;
+		int x2 = 0;
+		int y2 = 0;
+		if (playablePosition(domBest, plateau).isEmpty()) {
+			return 1;
+		}
+		ArrayList<ArrayList<Integer>> centrerChateau = positionsCentrer(plateau, domBest);
+		//System.out.println("position centrer :" + centrerChateau);
+		//System.out.println("Possibilité de centrer :" + centerTownHall(plateau, domBest));
+		ArrayList<ArrayList<Integer>> positionJouable = playablePosition(domBest, plateau);
+		ArrayList<Integer> bestPointArea = nbrPointPredict(plateau, domBest);
+		// Si ce domino peut conserver le chateau centrer on le fait
+		if (centerTownHall(plateau, domBest) == 1) {
+
+			if (appartient(bestPointArea, centrerChateau)) {
+				x1 = bestPointArea.get(0);
+				y1 = bestPointArea.get(1);
+				x2 = bestPointArea.get(2);
+				y2 = bestPointArea.get(3);
+
+			} else {
+				x1 = centrerChateau.get(0).get(0);
+				y1 = centrerChateau.get(0).get(1);
+				x2 = centrerChateau.get(0).get(2);
+				y2 = centrerChateau.get(0).get(3);
+
+			}
+		}
+		// Sinon on prend la première position jouable pour le domino
+		else {
+			x1 = positionJouable.get(0).get(0);
+			y1 = positionJouable.get(0).get(1);
+			x2 = positionJouable.get(0).get(2);
+			y2 = positionJouable.get(0).get(3);
+		}
+		plateau.cases[x1][y1] = domBest.type1 ;
+		plateau.cases[x2][y2] = domBest.type2 ;
+		plateau.couronnes[x1][y1] = domBest.nbCouronne1;
+		plateau.couronnes[x2][y2] = domBest.nbCouronne2;
+		
+
+		return 1;
+	}
+
+
+	private static void checkSize(Plateau plateau, int x1, int y1, int x2, int y2) {
+		loopColumns(x1, plateau);
+		if (x2 != x1) {
+			loopColumns(x2, plateau);
+		}
+
+		loopRows(y1, plateau);
+		if (y2 != y1) {
+			loopRows(y2, plateau);
+		}
+
+	}
+
+	private static void loopRows(int y, Plateau plateau) {
+		// loop through and count the number of nulls
+		int count = 0;
+		for (int i = 0; i < NB_CASES; i++) {
+			if (plateau.cases[i][y] != null) {
+				count++;
+			}
+		}
+		if (count > 4) {
+			System.out.println("Votre colonne est plus grande que 5 éléments !");
+		}
+		count = 0;
+	}
+
+	private static int loopRowsAAA(int y, Plateau plateau) {
+		// loop through and count the number of nulls
+		int count = 0;
+		for (int i = 0; i < NB_CASES; i++) {
+			if (plateau.cases[i][y] != null) {
+				count++;
+			}
+		}
+
+		return count;
+	}
+
+	private static void loopColumns(int x, Plateau plateau) {
+		// loop through and count the number of nulls
+		int count = 0;
+		for (int i = 0; i < NB_CASES; i++) {
+			if (plateau.cases[x][i] != null) {
+				count++;
+			}
+		}
+		if (count > 4) {
+			System.out.println("Votre ligne est plus grande que 5 éléments !");
+		}
+		count = 0;
+	}
+
+	private static int loopColumnsAAA(int x, Plateau plateau) {
+		// loop through and count the number of nulls
+		int count = 0;
+		for (int i = 0; i < NB_CASES; i++) {
+			if (plateau.cases[x][i] != null) {
+				count++;
+			}
+		}
+
+		return count;
+	}
+
+	private static ArrayList<String> getNearCases(Plateau plateau, int x, int y) {
+		ArrayList<String> near = new ArrayList<String>();
+
+		if (x < NB_CASES - 1 && plateau.cases[x + 1][y] != null) { // avoid null & out of bound
+			near.add(plateau.cases[x + 1][y]); // below
+		}
+		if (y < NB_CASES - 1 && plateau.cases[x][y + 1] != null) {
+			near.add(plateau.cases[x][y + 1]); // right
+		}
+		if (x > 0 && plateau.cases[x - 1][y] != null) {
+			near.add(plateau.cases[x - 1][y]); // above
+		}
+		if (y > 0 && plateau.cases[x][y - 1] != null) {
+			near.add(plateau.cases[x][y - 1]); // left
+		}
+		return near;
+	}
+
+	private static ArrayList<String> getNullCases(Plateau plateau, int x, int y) {
+		ArrayList<String> near = new ArrayList<String>();
+
+		if (x < NB_CASES - 1 && plateau.cases[x + 1][y] == null) { // avoid out of bound
+			near.add(plateau.cases[x + 1][y]); // below
+		}
+		if (y < NB_CASES - 1 && plateau.cases[x][y + 1] == null) {
+			near.add(plateau.cases[x][y + 1]); // right
+		}
+		if (x > 0 && plateau.cases[x - 1][y] == null) {
+			near.add(plateau.cases[x - 1][y]); // above
+		}
+		if (y > 0 && plateau.cases[x][y - 1] == null) {
+			near.add(plateau.cases[x][y - 1]); // left
+		}
+		return near;
+	}
+
+	private static ArrayList<String> getNullCases1(Plateau plateau, int x, int y) {
+		ArrayList<String> near = new ArrayList<String>();
+
+		if (x - 1 < 0) { // above
+			near.add("horsplateau");
+		}
+
+		else {
+			near.add(plateau.cases[x - 1][y]); // above
+
+		}
+
+		if (y + 1 >= 9) { // right
+			near.add("horsplateau");
+		} else {
+			near.add(plateau.cases[x][y + 1]); // right
+		}
+
+		if (x + 1 >=9) { // below
+			near.add("horsplateau");
+		} else {
+			near.add(plateau.cases[x + 1][y]); // below
+		}
+
+		if (y - 1 < 0) { // left
+			near.add("horsplateau");
+		} else {
+			near.add(plateau.cases[x][y - 1]); // left
+		}
+
+		return near;
+	}
+
+	protected static void nextDominos() {
+		// clear old lists
+		dominoOrder.clear();
+		playableDominos.clear();
+
+		for (int i = 0; i < Kings.allKings.size(); i++) { // for each king in game
+			Random rand = new Random();
+			int n = rand.nextInt(allDominoes.size()); // get a random domino number
+
+			playableDominos.add(allDominoes.get(n));
+			allDominoes.remove(n);// removes the selected domino from the list
+
+		}
+		Collections.sort(playableDominos);
+
+		// sets the domino order with ordered playables
+		for (int j = 0; j < playableDominos.size(); j++) {
+			dominoOrder.add(j);
+		}
+
+		//System.out.print("Domino current : ");
+		/*for (Domino domino : currentDominos) {
+			System.out.print("Domino " + domino.numDomino + ", ");
+		}*/
+		//System.out.println();
+		//System.out.print("Domino playable : ");
+		for (Domino domino : playableDominos) {
+			//System.out.print("Domino " + domino.numDomino + ", ");
+		}
+		//System.out.println("\n");
+
+	}
+
+	@Override
+	public int compareTo(Domino dom) { // comes with the implement, read the doc
+		return this.numDomino - dom.numDomino; // compares dominos numbers
+	}
+
+}
+
+class Kings {
+	String color;
+	static ArrayList<Kings> allKings = new ArrayList<Kings>();
+
+	static void createKings() {
+		String[] possibleColors = { "pink", "yellow", "green", "blue" }; // allows to easily init all kings in for loop
+		for (int i = 0; i < 4; i++) {
+			Kings king = new Kings();
+			king.color = possibleColors[i];
+			allKings.add(king);
+		}
+	}
+
+	static void removeKing() {
+		allKings.remove(3); // removes the last King
+	}
+
+
+}
+
+class Players implements Comparable<Players> {
+	static int nbPlayers;
+	static int compteur=0;
+	static int compteur1=0;
+	static int moyenne=0;
+	static double realMoy;
+	
+	double a;
+	double b;
+	double c;
+	double d;
+	double e;
+	static ArrayList<Players> allPlayers = new ArrayList<Players>();
+	public static ArrayList<Players> newOrder = new ArrayList<Players>();
+	static ArrayList<ArrayList<Double>> coefWinner= new ArrayList<ArrayList<Double>>();
+
+	ArrayList<Kings> playerKings = new ArrayList<Kings>();
+	ArrayList<Domino> playerDominos = new ArrayList<Domino>();
+	Plateau playerPlateau;
+	String name;
+	int scoreTotal;
+
+	static void createPlayers() {
+		playersNumber();
+
+		for (int i = 0; i < nbPlayers; i++) {
+			Players player = new Players();
+
+			allPlayers.add(player);
+		}
+
+		for (int i = 0; i < 4; i++) {
+			// for now we don't have any order set.
+			newOrder.add(null);
+		}
+
+		playersNames();
+	}
+	static void coef(ArrayList<Double> coefSel) {
+		for (Players player : allPlayers) {
+			player.a = coefSel.get(2);
+			player.b = coefSel.get(3);
+			player.c =coefSel.get(4);
+			player.d =coefSel.get(5);
+			player.e =coefSel.get(6);
+		}
+	}
+	static void genererCoef() {
+		
+		
+		for (Players player : allPlayers) {
+			player.a = ThreadLocalRandom.current().nextDouble(0, 100);
+			player.b = ThreadLocalRandom.current().nextDouble(0, 100);
+			player.c =ThreadLocalRandom.current().nextDouble(0, 100);
+			player.d =ThreadLocalRandom.current().nextDouble(0,100);
+			player.e =ThreadLocalRandom.current().nextDouble(0, 100);
+		}
+		/*for (Players player : allPlayers) {
+			double[] coeff = {
+					40.0, 1.006133368418809, 5.15910019697894, 12.814308318574772, 0.5958672979196273, 8.367782652731817
+					}; 
+			player.a = coeff[1];
+			player.b = coeff[2];
+			player.c = coeff[3];
+			player.d = coeff[4];
+			player.e = coeff[5];
+		}*/
+	}
+	private static void playersNumber() {
+		/*Scanner scan = new Scanner(System.in);
+		System.out.println("Entrez le nombre de joueurs: ");
+		while (!scan.hasNext("[1-4]")) {
+			System.out.println("Entrez un nombre entre 1 et 4 !");
+			scan.next(); // this is important!
+		}*/
+		//TODO:initilisation des joueurs à 2
+		//Players.nbPlayers = scan.nextInt();
+		Players.nbPlayers =2;
+	}
+
+
+	
+
+	private static void playersNames() {
+		int i = 0;
+		/*Scanner scan = new Scanner(System.in);
+		System.out.println("Entrez le nom de chaque joueur: ");*/
+
+		for (Players player : allPlayers) {
+			//System.out.println("Joueur " + i + ":");
+			//TODO:ini des pseudo à ""
+			//player.name = scan.nextLine();
+			player.name = Integer.toString(i);
+			i++;
+		}
+
+	}
+
+	static void givePlayersKings() {
+		int i = 0;
+
+		while (i < Kings.allKings.size()) { // while we still have kings to give
+			for (Players player : allPlayers) { // for each player
+				player.playerKings.add(Kings.allKings.get(i)); // give the player a king
+				i++;
+			}
+		}
+
+		/*for (Players player : allPlayers) {
+			System.out.println(player.name + ": " + player.playerKings);
+		}*/
+	}
+
+	// get a random starting order
+	public static void shuffleKings() {
+		/*
+		 * Used the Fisher�Yates shuffle, hope we were allowed to implement already
+		 * existing methods. Did the implementation myself.
+		 */
+		
+
+		int m = allPlayers.size();
+		//System.out.println("le nombre de joueur est lors du shuffle:" + allPlayers.size());
+		int i;
+		Players temp;
+		Random rand = new Random();
+
+		while (m != 0) {
+			// Pick a remaining element, decrement m
+			i = rand.nextInt(m);
+			m--;
+
+			// Swap it with current element.
+			temp = allPlayers.get(m);
+			allPlayers.set(m, allPlayers.get(i));
+			allPlayers.set(i, temp);
+		}
+		//System.out.println(allPlayers);
+	}
+
+	static void winner() {
+		ArrayList<Players> joueurCompté = new ArrayList<Players>();
+		ArrayList<Double> coef = new ArrayList<Double>();
+		for (Players player : allPlayers) {
+
+			for (Integer score : player.playerPlateau.score) {
+				player.scoreTotal += score;
+			}
+
+			if (!joueurCompté.contains(player)) {
+				compteur++;
+				moyenne = player.scoreTotal + moyenne;
+			}
+			joueurCompté.add(player);
+		}
+		realMoy = moyenne / compteur + realMoy;
+		Collections.sort(allPlayers); // sort players to get positions by score
+		// last player in the list is the winner
+		int scoreWinner = Players.allPlayers.get(allPlayers.size() - 1).scoreTotal/2;
+		
+		if(scoreWinner>30) {
+			compteur1++;
+			coef.add((double) compteur1);
+			coef.add((double) scoreWinner);
+			coef.add(Players.allPlayers.get(allPlayers.size() - 1).a);
+			coef.add(Players.allPlayers.get(allPlayers.size() - 1).b);
+			coef.add(Players.allPlayers.get(allPlayers.size() - 1).c);
+			coef.add(Players.allPlayers.get(allPlayers.size() - 1).d);
+			coef.add(Players.allPlayers.get(allPlayers.size() - 1).e);
+			coefWinner.add(new ArrayList<Double>(coef));
+			coef.clear();
+			
+		}
+	}
+	
+
+	@Override
+	public int compareTo(Players player) {
+		return this.scoreTotal - player.scoreTotal;
+	}
+
+}
+
+public class Main {
+	public static void main(String[] args) {
+		long debut = System.currentTimeMillis();
+		for(int i=0; i<40000;i++) {
+		System.out.print("Etape 1 : tour " + i);
+		Plateau.initialize();
+		Domino domB = firstTurn();
+		Players.genererCoef();
+		nextTurn(domB);
+		
+		for (Players player : Players.allPlayers) {
+			player.playerPlateau.score.clear();
+			player.playerKings.clear();
+		}
+		Kings.allKings.clear();
+		Plateau.allPlateau.clear();
+		Players.newOrder.clear();
+		Players.allPlayers.clear();
+		
+
+		// Plateau.endGame();}
+		}
+		
+		
+
+			PrintWriter writer = null;
+			try {
+				writer = new PrintWriter("C:\\Users\\Utilisateur\\Desktop\\coef_gagnant.txt");
+			} catch (FileNotFoundException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}finally {
+			
+			writer.println(Players.coefWinner);
+			
+			writer.close();
+		}
+			System.out.print("temps d'execution :");
+			System.out.println(System.currentTimeMillis()-debut);
+			Players.compteur=0;
+			Players.moyenne=0;
+			Players.realMoy=0;
+			System.out.print("Taille de coefWinner :" +Players.coefWinner.size());
+			int borne = Players.coefWinner.size();
+			for (int i=0; i<borne;i++) {
+				System.out.print("Etape 2 : tour " + i +"   ");
+				for(int j=0; j<400;j++) {
+					Plateau.initialize();
+					Domino domB = firstTurn();
+					Players.coef(Players.coefWinner.get(i));
+					nextTurn(domB);
+					
+					for (Players player : Players.allPlayers) {
+						player.playerPlateau.score.clear();
+						player.playerKings.clear();
+					}
+					Kings.allKings.clear();
+					Plateau.allPlateau.clear();
+					Players.newOrder.clear();
+					Players.allPlayers.clear();
+				}
+		
+		
+				
+				try{PrintWriter out = new PrintWriter(new BufferedWriter(new FileWriter("C:\\Users\\Utilisateur\\Desktop\\moyenne_30.txt", true)));
+					out.print("Joueur : ");
+					out.print(i);
+					out.print(" ");
+					out.println(Players.realMoy/400);
+					out.print(" points");
+					out.close();
+					}catch (IOException e)
+					{
+						e.printStackTrace();
+					}
+				Players.compteur=0;
+				Players.moyenne=0;
+				Players.realMoy=0;
+		}
+			System.out.print("Fini :");
+	}
+
+	private static Domino firstTurn() {
+		// gives a random order for players
+		Players.shuffleKings();
+		Domino.nextDominos(); // first domino line
+		Domino domBest = null;
+		do {
+			for (Players player : Players.allPlayers) {
+				// choose his next domino
+				domBest = Domino.iAChoose(player.playerPlateau, player.a, player.b, player.c, player.d, player.e, player);
+			}
+		} while (!Domino.playableDominos.isEmpty());
+
+		// copy playable into current
+		Domino.currentDominos.addAll(Domino.playableDominos);
+
+		//System.out.println(Players.newOrder);
+		Players.allPlayers.clear();
+		Players.allPlayers.addAll(Players.newOrder);
+		
+		return domBest;
+	}
+
+	private static void nextTurn(Domino domBest) {
+		String orientation;
+		int[] coordinates = new int[2];
+		
+		// clears the next order of players
+		Players.newOrder.replaceAll(e -> null);
+		//System.out.println(Players.newOrder);
+		// new domino line
+		Domino.nextDominos();
+		
+		do { // do while used for 2 players
+			for (Players player : Players.allPlayers) {
+				// check if domino can be placed
+
+				Domino.iAPlace(player.playerPlateau, domBest, player);
+				//Domino.affiche(player.playerPlateau);
+				//Scanner scan = new Scanner(System.in);
+				//System.out.print("You're next guess? ");
+				//String guess = scan.next();
+				domBest = Domino.iAChoose(player.playerPlateau, player.a, player.b, player.c, player.d, player.e, player);
+				
+
+			}
+
+			// currentDominos deleted in placeDomino
+			// added in chooseDomino then sorted
+			Collections.sort(Domino.currentDominos);
+
+			// same with allPlayers and newOrder
+			//System.out.println("new order:" + Players.newOrder);
+			Players.allPlayers.clear();
+			Players.allPlayers.addAll(Players.newOrder);
+
+			if (Domino.allDominoes.size() == 0) { // TODO: other finishing checks
+				//Plateau.afficherPlateau();
+				Plateau.endGame();
+			} else {
+				nextTurn(domBest);
+			}
+
+		} while (!Domino.playableDominos.isEmpty());
+
+		// TODO: if can't place domino throw it away
+	}
+}
